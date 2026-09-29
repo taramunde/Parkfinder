@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, viewport-fit=cover"
+  />
+
+  <title>ParkFinder — Coche aparcado</title>
+
+  <meta
+    name="description"
+    content="Guarda y encuentra la posición de tu coche aparcado."
+  />
+
+  <link rel="stylesheet" href="styles.css" />
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+</head>
+
+<body>
+  <main class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-icon">🚗</div>
+
+        <div>
+          <h1>ParkFinder</h1>
+          <p>Tu coche. Su posición. Cero vueltas innecesarias.</p>
+        </div>
+      </div>
+
+      <div class="top-actions">
+        <button class="btn small" id="exportBtn">⬇ Exportar</button>
+        <button class="btn small" id="importBtn">⬆ Importar</button>
+        <button class="btn small" id="themeBtn">◐ Tema</button>
+
+        <input
+          id="importFile"
+          type="file"
+          accept=".json,application/json"
+          hidden
+        />
+      </div>
+    </header>
+
+    <section class="layout">
+      <aside class="sidebar">
+        <section class="panel">
+          <h2>Guardar aparcamiento</h2>
+
+          <div class="form-grid">
+            <label>
+              Nombre
+              <input
+                id="spotName"
+                type="text"
+                maxlength="60"
+                placeholder="Ej.: Coche Avilés"
+              />
+            </label>
+
+            <div class="form-row">
+              <label>
+                Planta
+                <input
+                  id="spotFloor"
+                  type="text"
+                  maxlength="20"
+                  placeholder="Ej.: -2"
+                />
+              </label>
+
+              <label>
+                Plaza
+                <input
+                  id="spotNumber"
+                  type="text"
+                  maxlength="20"
+                  placeholder="Ej.: B-42"
+                />
+              </label>
+            </div>
+
+            <label>
+              Notas
+              <textarea
+                id="spotNotes"
+                maxlength="300"
+                placeholder="Ej.: junto al ascensor, columna azul..."
+              ></textarea>
+            </label>
+          </div>
+
+          <div class="button-stack">
+            <button class="btn primary" id="saveCurrentBtn">
+              📍 Guardar mi posición actual
+            </button>
+
+            <div class="button-grid">
+              <button class="btn" id="locateBtn">🎯 Localizarme</button>
+              <button class="btn" id="compassBtn">🧭 Brújula</button>
+            </div>
+          </div>
+
+          <div class="location-preview">
+            <strong id="currentStatus">Sin posición capturada</strong>
+
+            <span id="currentCoords">
+              Pulsa “Guardar mi posición actual” para registrar el coche.
+            </span>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Mis coches guardados</h2>
+          <div id="savedList" class="saved-list"></div>
+        </section>
+
+        <section class="panel">
+          <h3>Funciones inteligentes</h3>
+
+          <p class="tip">
+            Las ubicaciones se guardan únicamente en este navegador. Puedes
+            exportarlas como archivo JSON para realizar una copia de seguridad.
+          </p>
+
+          <br />
+
+          <p class="tip">
+            Al pulsar “Ir”, se abrirá Google Maps con el vehículo como destino.
+          </p>
+        </section>
+      </aside>
+
+      <section class="map-shell">
+        <div id="map"></div>
+
+        <div class="map-toolbar">
+          <div class="map-status" id="mapStatus">
+            Mapa preparado
+          </div>
+
+          <div class="map-tools">
+            <button class="btn small" id="mapTypeBtn">
+              🛰 Satélite
+            </button>
+
+            <button class="btn small" id="fitBtn">
+              ▣ Ver todo
+            </button>
+          </div>
+        </div>
+
+        <div class="compass" id="compass">
+          <span class="compass-label">N</span>
+          <span class="compass-arrow" id="compassArrow">▲</span>
+        </div>
+      </section>
+    </section>
+
+    <footer>
+      ParkFinder funciona en tu navegador.
+
+      Mapa:
+      <a
+        href="https://www.openstreetmap.org/copyright"
+        target="_blank"
+        rel="noopener"
+      >
+        OpenStreetMap
+      </a>.
+
+      Vista satélite proporcionada por Esri.
+    </footer>
+  </main>
+
+  <div class="toast-container" id="toastContainer"></div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script src="app.js"></script>
+</body>
+</html>
