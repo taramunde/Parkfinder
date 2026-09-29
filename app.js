@@ -1,6 +1,6 @@
 "use strict";
 
-const STORAGE_KEY = "parkfinder.spots.v1";
+const STORAGE_KEY = "parkfinder.spots.v2";
 const THEME_KEY = "parkfinder.theme.v1";
 
 const $ = (selector) => document.querySelector(selector);
@@ -9,6 +9,7 @@ const ui = {
   mapStatus: $("#mapStatus"),
   currentStatus: $("#currentStatus"),
   currentCoords: $("#currentCoords"),
+  currentAddress: $("#currentAddress"),
   savedList: $("#savedList"),
   toastContainer: $("#toastContainer"),
   spotName: $("#spotName"),
@@ -118,6 +119,81 @@ function formatDate(timestamp) {
   }).format(new Date(timestamp));
 }
 
+async function reverseGeocode(lat, lng) {
+  const url =
+    "https://nominatim.openstreetmap.org/reverse" +
+    `?lat=${encodeURIComponent(lat)}` +
+    `&lon=${encodeURIComponent(lng)}` +
+    "&format=jsonv2" +
+    "&zoom=18" +
+    "&addressdetails=1" +
+    "&accept-language=es";
+
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json"
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudo obtener la dirección.");
+  }
+
+  return response.json();
+}
+
+function getStreetName(data) {
+  if (!data || !data.address) {
+    return "";
+  }
+
+  const address = data.address;
+
+  const street =
+    address.road ||
+    address.pedestrian ||
+    address.residential ||
+    address.footway ||
+    address.path ||
+    "";
+
+  const houseNumber = address.house_number
+    ? ` ${address.house_number}`
+    : "";
+
+  const city =
+    address.city ||
+    address.town ||
+    address.village ||
+    address.municipality ||
+    "";
+
+  return [street + houseNumber, city]
+    .filter(Boolean)
+    .join(", ");
+}
+
+async function getAddressForPosition(lat, lng) {
+  try {
+    const data = await reverseGeocode(lat, lng);
+
+    return {
+      street: getStreetName(data),
+      fullAddress: data.display_name || ""
+    };
+  } catch (error) {
+    console.warn(
+      "Geocodificación inversa no disponible:",
+      error
+    );
+
+    return {
+      street: "",
+      fullAddress: ""
+    };
+  }
+}
+
 function makeCarIcon(selected = false) {
   return L.divIcon({
     className: "custom-car-marker",
@@ -152,18 +228,38 @@ function drawSpots() {
     });
 
     const details = [
-      spot.floor ? `Planta: ${escapeHtml(spot.floor)}` : "",
-      spot.number ? `Plaza: ${escapeHtml(spot.number)}` : "",
-      spot.notes ? escapeHtml(spot.notes) : "",
+      spot.street
+        ? `<strong>📍 ${escapeHtml(spot.street)}</strong>`
+        : "",
+
+      spot.floor
+        ? `Planta: ${escapeHtml(spot.floor)}`
+        : "",
+
+      spot.number
+        ? `Plaza: ${escapeHtml(spot.number)}`
+        : "",
+
+      spot.notes
+        ? escapeHtml(spot.notes)
+        : "",
+
       `<small>${formatCoords(spot.lat, spot.lng)}</small>`
     ]
       .filter(Boolean)
       .join("<br>");
 
     marker.bindPopup(`
-      <div class="popup-title">🚗 ${escapeHtml(spot.name)}</div>
-      <div class="popup-text">${details}</div>
+      <div class="popup-title">
+        🚗 ${escapeHtml(spot.name)}
+      </div>
+
+      <div class="popup-text">
+        ${details}
+      </div>
+
       <br>
+
       <button class="btn small primary popup-navigate">
         Abrir Google Maps
       </button>
@@ -204,37 +300,77 @@ function renderSavedList() {
     .slice()
     .sort((a, b) => b.createdAt - a.createdAt)
     .map((spot) => {
-      const active = spot.id === selectedSpotId ? "active" : "";
+      const active =
+        spot.id === selectedSpotId
+          ? "active"
+          : "";
 
       return `
-        <article class="saved-card ${active}" data-id="${spot.id}">
+        <article
+          class="saved-card ${active}"
+          data-id="${spot.id}"
+        >
           <div class="saved-title">
-            <span>🚗 ${escapeHtml(spot.name)}</span>
-            <span class="badge">Guardado</span>
+            <span>
+              🚗 ${escapeHtml(spot.name)}
+            </span>
+
+            <span class="badge">
+              Guardado
+            </span>
           </div>
 
           <div class="saved-meta">
-            ${spot.floor ? `Planta: ${escapeHtml(spot.floor)} · ` : ""}
-            ${spot.number ? `Plaza: ${escapeHtml(spot.number)} · ` : ""}
-            ${formatDate(spot.createdAt)}<br>
+            ${spot.street
+              ? `<span class="saved-address">
+                   📍 ${escapeHtml(spot.street)}
+                 </span><br>`
+              : ""}
+
+            ${spot.floor
+              ? `Planta: ${escapeHtml(spot.floor)} · `
+              : ""}
+
+            ${spot.number
+              ? `Plaza: ${escapeHtml(spot.number)} · `
+              : ""}
+
+            ${formatDate(spot.createdAt)}
+            <br>
+
             ${formatCoords(spot.lat, spot.lng)}
-            ${spot.notes ? `<br>${escapeHtml(spot.notes)}` : ""}
+
+            ${spot.notes
+              ? `<br>${escapeHtml(spot.notes)}`
+              : ""}
           </div>
 
           <div class="saved-actions">
-            <button class="btn small primary navigate-btn" data-id="${spot.id}">
+            <button
+              class="btn small primary navigate-btn"
+              data-id="${spot.id}"
+            >
               🧭 Ir
             </button>
 
-            <button class="btn small focus-btn" data-id="${spot.id}">
+            <button
+              class="btn small focus-btn"
+              data-id="${spot.id}"
+            >
               🔎 Ver
             </button>
 
-            <button class="btn small copy-btn" data-id="${spot.id}">
+            <button
+              class="btn small copy-btn"
+              data-id="${spot.id}"
+            >
               📋 Copiar
             </button>
 
-            <button class="btn small danger delete-btn" data-id="${spot.id}">
+            <button
+              class="btn small danger delete-btn"
+              data-id="${spot.id}"
+            >
               🗑 Borrar
             </button>
           </div>
@@ -245,9 +381,13 @@ function renderSavedList() {
 
   document.querySelectorAll(".saved-card").forEach((card) => {
     card.addEventListener("click", (event) => {
-      if (event.target.closest("button")) return;
+      if (event.target.closest("button")) {
+        return;
+      }
 
-      const spot = spots.find((item) => item.id === card.dataset.id);
+      const spot = spots.find(
+        (item) => item.id === card.dataset.id
+      );
 
       if (spot) {
         focusSpot(spot);
@@ -263,7 +403,9 @@ function renderSavedList() {
 
   document.querySelectorAll(".focus-btn").forEach((button) => {
     button.addEventListener("click", () => {
-      const spot = spots.find((item) => item.id === button.dataset.id);
+      const spot = spots.find(
+        (item) => item.id === button.dataset.id
+      );
 
       if (spot) {
         focusSpot(spot);
@@ -273,7 +415,9 @@ function renderSavedList() {
 
   document.querySelectorAll(".copy-btn").forEach((button) => {
     button.addEventListener("click", () => {
-      const spot = spots.find((item) => item.id === button.dataset.id);
+      const spot = spots.find(
+        (item) => item.id === button.dataset.id
+      );
 
       if (spot) {
         copyCoordinates(spot);
@@ -297,22 +441,32 @@ function focusSpot(spot) {
 
   drawSpots();
   renderSavedList();
+
   setStatus(`Mostrando: ${spot.name}`);
 }
 
 function getCurrentPosition(options = {}) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) {
-      reject(new Error("Este navegador no admite geolocalización."));
+      reject(
+        new Error(
+          "Este navegador no admite geolocalización."
+        )
+      );
+
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(resolve, reject, {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0,
-      ...options
-    });
+    navigator.geolocation.getCurrentPosition(
+      resolve,
+      reject,
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+        ...options
+      }
+    );
   });
 }
 
@@ -332,12 +486,18 @@ async function locateUser() {
     updateUserMarker(currentPosition);
 
     map.setView(
-      [currentPosition.lat, currentPosition.lng],
+      [
+        currentPosition.lat,
+        currentPosition.lng
+      ],
       18,
-      { animate: true }
+      {
+        animate: true
+      }
     );
 
-    ui.currentStatus.textContent = "Posición actual detectada";
+    ui.currentStatus.textContent =
+      "Posición actual detectada";
 
     ui.currentCoords.textContent = formatCoords(
       currentPosition.lat,
@@ -371,33 +531,42 @@ function updateUserMarker(position) {
     map.removeLayer(userAccuracyCircle);
   }
 
-  userMarker = L.marker([position.lat, position.lng], {
-    icon: L.divIcon({
-      className: "current-position-marker",
+  userMarker = L.marker(
+    [
+      position.lat,
+      position.lng
+    ],
+    {
+      icon: L.divIcon({
+        className: "current-position-marker",
 
-      html: `
-        <div style="
-          width: 20px;
-          height: 20px;
-          border-radius: 50%;
-          background: #5aa9ff;
-          border: 4px solid white;
-          box-shadow:
-            0 0 0 8px rgba(90,169,255,.2),
-            0 4px 14px rgba(0,0,0,.4);
-        "></div>
-      `,
+        html: `
+          <div style="
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #5aa9ff;
+            border: 4px solid white;
+            box-shadow:
+              0 0 0 8px rgba(90,169,255,.2),
+              0 4px 14px rgba(0,0,0,.4);
+          "></div>
+        `,
 
-      iconSize: [20, 20],
-      iconAnchor: [10, 10]
-    })
-  })
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      })
+    }
+  )
     .addTo(map)
     .bindPopup("📱 Tu posición actual");
 
   if (Number.isFinite(position.accuracy)) {
     userAccuracyCircle = L.circle(
-      [position.lat, position.lng],
+      [
+        position.lat,
+        position.lng
+      ],
       {
         radius: position.accuracy,
         color: "#5aa9ff",
@@ -422,17 +591,45 @@ async function saveCurrentPosition() {
       timestamp: Date.now()
     };
 
+    updateUserMarker(currentPosition);
+
+    ui.currentStatus.textContent =
+      "Buscando el nombre de la calle…";
+
+    ui.currentCoords.textContent = formatCoords(
+      currentPosition.lat,
+      currentPosition.lng,
+      currentPosition.accuracy
+    );
+
+    ui.currentAddress.textContent =
+      "Consultando dirección aproximada…";
+
+    const address = await getAddressForPosition(
+      currentPosition.lat,
+      currentPosition.lng
+    );
+
     const defaultName =
       ui.spotName.value.trim() ||
-      `Coche · ${new Intl.DateTimeFormat("es-ES", {
-        dateStyle: "short",
-        timeStyle: "short"
-      }).format(new Date())}`;
+      (
+        address.street
+          ? `Coche · ${address.street}`
+          : `Coche · ${new Intl.DateTimeFormat(
+              "es-ES",
+              {
+                dateStyle: "short",
+                timeStyle: "short"
+              }
+            ).format(new Date())}`
+      );
 
     const spot = {
       id:
         crypto.randomUUID?.() ||
-        `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        `${Date.now()}-${Math.random()
+          .toString(16)
+          .slice(2)}`,
 
       name: defaultName,
       floor: ui.spotFloor.value.trim(),
@@ -441,6 +638,8 @@ async function saveCurrentPosition() {
       lat: currentPosition.lat,
       lng: currentPosition.lng,
       accuracy: currentPosition.accuracy,
+      street: address.street,
+      fullAddress: address.fullAddress,
       createdAt: Date.now()
     };
 
@@ -448,15 +647,22 @@ async function saveCurrentPosition() {
     selectedSpotId = spot.id;
 
     saveSpots();
-    updateUserMarker(currentPosition);
     drawSpots();
     renderSavedList();
 
-    map.setView([spot.lat, spot.lng], 19, {
-      animate: true
-    });
+    map.setView(
+      [
+        spot.lat,
+        spot.lng
+      ],
+      19,
+      {
+        animate: true
+      }
+    );
 
-    ui.currentStatus.textContent = "Coche guardado";
+    ui.currentStatus.textContent =
+      "Coche guardado";
 
     ui.currentCoords.textContent = formatCoords(
       spot.lat,
@@ -464,14 +670,24 @@ async function saveCurrentPosition() {
       spot.accuracy
     );
 
+    ui.currentAddress.textContent =
+      address.street || "Calle no identificada";
+
     ui.spotName.value = "";
     ui.spotFloor.value = "";
     ui.spotNumber.value = "";
     ui.spotNotes.value = "";
 
     setStatus(`Coche guardado: ${spot.name}`);
-    showToast("Aparcamiento guardado.");
+
+    showToast(
+      address.street
+        ? `Aparcamiento guardado en ${address.street}.`
+        : "Aparcamiento guardado."
+    );
   } catch (error) {
+    console.error(error);
+
     const message =
       error.code === 1
         ? "Necesitas permitir el acceso a la ubicación."
@@ -483,17 +699,25 @@ async function saveCurrentPosition() {
 }
 
 function deleteSpot(id) {
-  const spot = spots.find((item) => item.id === id);
+  const spot = spots.find(
+    (item) => item.id === id
+  );
 
-  if (!spot) return;
+  if (!spot) {
+    return;
+  }
 
   const confirmed = confirm(
     `¿Borrar la ubicación "${spot.name}"?`
   );
 
-  if (!confirmed) return;
+  if (!confirmed) {
+    return;
+  }
 
-  spots = spots.filter((item) => item.id !== id);
+  spots = spots.filter(
+    (item) => item.id !== id
+  );
 
   if (selectedSpotId === id) {
     selectedSpotId = null;
@@ -508,22 +732,32 @@ function deleteSpot(id) {
 }
 
 function navigateTo(id) {
-  const spot = spots.find((item) => item.id === id);
+  const spot = spots.find(
+    (item) => item.id === id
+  );
 
-  if (!spot) return;
+  if (!spot) {
+    return;
+  }
 
-  const destination = `${spot.lat},${spot.lng}`;
+  const destination =
+    `${spot.lat},${spot.lng}`;
 
   const googleUrl =
     "https://www.google.com/maps/dir/?api=1" +
     `&destination=${encodeURIComponent(destination)}` +
     "&travelmode=walking";
 
-  window.open(googleUrl, "_blank", "noopener");
+  window.open(
+    googleUrl,
+    "_blank",
+    "noopener"
+  );
 }
 
 async function copyCoordinates(spot) {
-  const text = `${spot.lat}, ${spot.lng}`;
+  const text =
+    `${spot.lat}, ${spot.lng}`;
 
   try {
     await navigator.clipboard.writeText(text);
@@ -545,29 +779,40 @@ function fitAll() {
   }
 
   if (!layers.length) {
-    showToast("No hay ubicaciones para mostrar.", "error");
+    showToast(
+      "No hay ubicaciones para mostrar.",
+      "error"
+    );
+
     return;
   }
 
   const group = L.featureGroup(layers);
 
-  map.fitBounds(group.getBounds().pad(0.25));
-  setStatus("Mostrando todas las ubicaciones");
+  map.fitBounds(
+    group.getBounds().pad(0.25)
+  );
+
+  setStatus(
+    "Mostrando todas las ubicaciones"
+  );
 }
 
 function toggleMapType() {
   map.removeLayer(currentTileLayer);
 
   satelliteEnabled = !satelliteEnabled;
+
   currentTileLayer = satelliteEnabled
     ? satelliteLayer
     : streetLayer;
 
   currentTileLayer.addTo(map);
 
-  ui.mapTypeBtn.textContent = satelliteEnabled
-    ? "🗺 Calles"
-    : "🛰 Satélite";
+  ui.mapTypeBtn.textContent =
+    satelliteEnabled
+      ? "🗺 Calles"
+      : "🛰 Satélite";
 
   setStatus(
     satelliteEnabled
@@ -580,13 +825,21 @@ function toggleCompass() {
   if (watchId !== null) {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
-    ui.compass.classList.remove("visible");
+
+    ui.compass.classList.remove(
+      "visible"
+    );
+
     showToast("Brújula desactivada.");
     return;
   }
 
   if (!navigator.geolocation) {
-    showToast("La geolocalización no está disponible.", "error");
+    showToast(
+      "La geolocalización no está disponible.",
+      "error"
+    );
+
     return;
   }
 
@@ -599,12 +852,14 @@ function toggleCompass() {
           `rotate(${position.coords.heading}deg)`;
       }
     },
+
     () => {
       showToast(
         "No se ha podido activar la orientación GPS.",
         "error"
       );
     },
+
     {
       enableHighAccuracy: true,
       maximumAge: 1000,
@@ -622,14 +877,22 @@ function toggleCompass() {
 function exportData() {
   const payload = {
     app: "ParkFinder",
-    version: 1,
+    version: 2,
     exportedAt: new Date().toISOString(),
     spots
   };
 
   const blob = new Blob(
-    [JSON.stringify(payload, null, 2)],
-    { type: "application/json" }
+    [
+      JSON.stringify(
+        payload,
+        null,
+        2
+      )
+    ],
+    {
+      type: "application/json"
+    }
   );
 
   const url = URL.createObjectURL(blob);
@@ -637,7 +900,9 @@ function exportData() {
 
   anchor.href = url;
   anchor.download =
-    `parkfinder-${new Date().toISOString().slice(0, 10)}.json`;
+    `parkfinder-${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
 
   document.body.appendChild(anchor);
   anchor.click();
@@ -645,7 +910,9 @@ function exportData() {
 
   URL.revokeObjectURL(url);
 
-  showToast("Copia de seguridad exportada.");
+  showToast(
+    "Copia de seguridad exportada."
+  );
 }
 
 function importData() {
@@ -655,38 +922,56 @@ function importData() {
 function handleImport(event) {
   const file = event.target.files?.[0];
 
-  if (!file) return;
+  if (!file) {
+    return;
+  }
 
   const reader = new FileReader();
 
   reader.onload = () => {
     try {
-      const imported = JSON.parse(reader.result);
+      const imported = JSON.parse(
+        reader.result
+      );
 
-      const importedSpots = Array.isArray(imported)
-        ? imported
-        : imported.spots;
+      const importedSpots =
+        Array.isArray(imported)
+          ? imported
+          : imported.spots;
 
       if (!Array.isArray(importedSpots)) {
-        throw new Error("Formato no válido");
+        throw new Error(
+          "Formato no válido"
+        );
       }
 
-      const validSpots = importedSpots.filter(
-        (spot) =>
-          spot &&
-          typeof spot.lat === "number" &&
-          typeof spot.lng === "number"
-      );
+      const validSpots =
+        importedSpots.filter(
+          (spot) =>
+            spot &&
+            typeof spot.lat === "number" &&
+            typeof spot.lng === "number"
+        );
 
       spots = [
         ...spots,
+
         ...validSpots.map((spot) => ({
           ...spot,
+
           id:
             spot.id ||
-            `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-          name: spot.name || "Coche importado",
-          createdAt: spot.createdAt || Date.now()
+            `${Date.now()}-${Math.random()
+              .toString(16)
+              .slice(2)}`,
+
+          name:
+            spot.name ||
+            "Coche importado",
+
+          createdAt:
+            spot.createdAt ||
+            Date.now()
         }))
       ];
 
@@ -697,79 +982,4 @@ function handleImport(event) {
       showToast(
         `${validSpots.length} ubicación(es) importada(s).`
       );
-    } catch {
-      showToast(
-        "El archivo no tiene un formato válido.",
-        "error"
-      );
-    } finally {
-      ui.importFile.value = "";
-    }
-  };
-
-  reader.readAsText(file);
-}
-
-function loadTheme() {
-  if (localStorage.getItem(THEME_KEY) !== "light") {
-    return;
-  }
-
-  document.documentElement.style.setProperty(
-    "--bg",
-    "#eef5fb"
-  );
-
-  document.documentElement.style.setProperty(
-    "--panel",
-    "rgba(255,255,255,.9)"
-  );
-
-  document.documentElement.style.setProperty(
-    "--text",
-    "#10243e"
-  );
-
-  document.documentElement.style.setProperty(
-    "--muted",
-    "#52667b"
-  );
-
-  document.documentElement.style.setProperty(
-    "--border",
-    "rgba(16,36,62,.15)"
-  );
-
-  ui.themeBtn.textContent = "◑ Oscuro";
-}
-
-function toggleTheme() {
-  const isLight =
-    localStorage.getItem(THEME_KEY) === "light";
-
-  if (isLight) {
-    localStorage.removeItem(THEME_KEY);
-  } else {
-    localStorage.setItem(THEME_KEY, "light");
-  }
-
-  location.reload();
-}
-
-$("#locateBtn").addEventListener("click", locateUser);
-$("#saveCurrentBtn").addEventListener("click", saveCurrentPosition);
-$("#fitBtn").addEventListener("click", fitAll);
-$("#mapTypeBtn").addEventListener("click", toggleMapType);
-$("#compassBtn").addEventListener("click", toggleCompass);
-$("#exportBtn").addEventListener("click", exportData);
-$("#importBtn").addEventListener("click", importData);
-$("#themeBtn").addEventListener("click", toggleTheme);
-ui.importFile.addEventListener("change", handleImport);
-
-loadTheme();
-drawSpots();
-renderSavedList();
-
-if (spots.length) {
-  setStatus(`${spots.length} ubicación(es) guardada(s)`);
-              }
+    
