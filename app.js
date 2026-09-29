@@ -919,7 +919,7 @@ function importData() {
   ui.importFile.click();
 }
 
-function handleImport(event) {
+     function handleImport(event) {
   const file = event.target.files?.[0];
 
   if (!file) {
@@ -982,4 +982,124 @@ function handleImport(event) {
       showToast(
         `${validSpots.length} ubicación(es) importada(s).`
       );
-    
+    } catch (error) {
+      console.error(error);
+
+      showToast(
+        "El archivo no tiene un formato válido.",
+        "error"
+      );
+    } finally {
+      ui.importFile.value = "";
+    }
+  };
+
+  reader.readAsText(file);
+}
+
+function loadTheme() {
+  if (
+    localStorage.getItem(THEME_KEY) !== "light"
+  ) {
+    return;
+  }
+
+  document.documentElement.style.setProperty(
+    "--bg",
+    "#eef5fb"
+  );
+
+  document.documentElement.style.setProperty(
+    "--panel",
+    "rgba(255,255,255,.9)"
+  );
+
+  document.documentElement.style.setProperty(
+    "--text",
+    "#10243e"
+  );
+
+  document.documentElement.style.setProperty(
+    "--muted",
+    "#52667b"
+  );
+
+  document.documentElement.style.setProperty(
+    "--border",
+    "rgba(16,36,62,.15)"
+  );
+
+  ui.themeBtn.textContent =
+    "◑ Oscuro";
+}
+
+function toggleTheme() {
+  const isLight =
+    localStorage.getItem(THEME_KEY) === "light";
+
+  if (isLight) {
+    localStorage.removeItem(THEME_KEY);
+  } else {
+    localStorage.setItem(
+      THEME_KEY,
+      "light"
+    );
+  }
+
+  location.reload();
+}
+
+$("#locateBtn").addEventListener(
+  "click",
+  locateUser
+);
+
+$("#saveCurrentBtn").addEventListener(
+  "click",
+  saveCurrentPosition
+);
+
+$("#fitBtn").addEventListener(
+  "click",
+  fitAll
+);
+
+$("#mapTypeBtn").addEventListener(
+  "click",
+  toggleMapType
+);
+
+$("#compassBtn").addEventListener(
+  "click",
+  toggleCompass
+);
+
+$("#exportBtn").addEventListener(
+  "click",
+  exportData
+);
+
+$("#importBtn").addEventListener(
+  "click",
+  importData
+);
+
+$("#themeBtn").addEventListener(
+  "click",
+  toggleTheme
+);
+
+ui.importFile.addEventListener(
+  "change",
+  handleImport
+);
+
+loadTheme();
+drawSpots();
+renderSavedList();
+
+if (spots.length) {
+  setStatus(
+    `${spots.length} ubicación(es) guardada(s)`
+  );
+}     
